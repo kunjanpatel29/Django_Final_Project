@@ -7,7 +7,6 @@ from django.conf import settings
 from django.http import JsonResponse,HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
-from django.utils import timezone
 
 stripe.api_key = settings.STRIPE_PRIVATE_KEY
 YOUR_DOMAIN = 'http://127.0.0.1:8000'
@@ -41,7 +40,12 @@ def index(request):
 		if user.usertype=="buyer":
 			products=Product.objects.all()
 			carts=Cart.objects.filter(user=user,payment_status=False)
-			return render(request,'index.html',{'products':products,'carts':carts})
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			return render(request,'index.html',{'products':products,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 		else:
 			return redirect('seller-index')
 	except:
@@ -57,27 +61,32 @@ def signup(request):
 	if request.method=="POST":
 		try:
 			User.objects.get(email=request.POST['email'])
-			msg="Email Alredy Registered"
+			msg="Email Already Registered"
 			return render(request,'signup.html',{'msg':msg})
 		except:
-			if request.POST['password'] == request.POST['cpassword']:
-				User.objects.create(
-						fname=request.POST['fname'],
-						lname=request.POST['lname'],
-						email=request.POST['email'],
-						mobile=request.POST['mobile'],
-						address=request.POST['address'],
-						city=request.POST['city'],
-						zipcode=request.POST['zipcode'],
-						password=request.POST['password'],
-						profile_pic=request.FILES['profile_pic'],
-						usertype=request.POST['usertype'],
-					)
-				msg="User Sign Up Successfully"
-				return render(request,'signin.html',{'msg':msg})
-			else:
-				msg="Password & Confirm Password Does Not Matched"
+			try:
+				User.objects.get(mobile=request.POST['mobile'])
+				msg="Mobile Number Already Registered"
 				return render(request,'signup.html',{'msg':msg})
+			except:
+				if request.POST['password'] == request.POST['cpassword']:
+					User.objects.create(
+							fname=request.POST['fname'],
+							lname=request.POST['lname'],
+							email=request.POST['email'],
+							mobile=request.POST['mobile'],
+							address=request.POST['address'],
+							city=request.POST['city'],
+							zipcode=request.POST['zipcode'],
+							password=request.POST['password'],
+							profile_pic=request.FILES['profile_pic'],
+							usertype=request.POST['usertype'],
+						)
+					msg="User Sign Up Successfully"
+					return render(request,'signin.html',{'msg':msg})
+				else:
+					msg="Password & Confirm Password Does Not Matched"
+					return render(request,'signup.html',{'msg':msg})
 	else:
 		return render(request,'signup.html')
 
@@ -90,6 +99,7 @@ def signin(request):
 					request.session['email']=user.email
 					request.session['fname']=user.fname
 					request.session['profile_pic']=user.profile_pic.url
+					request.session['usertype']=user.usertype
 					wishlists=Wishlist.objects.filter(user=user)
 					request.session['wishlist_count']=len(wishlists)
 					carts=Cart.objects.filter(user=user,payment_status=False)
@@ -99,6 +109,7 @@ def signin(request):
 					request.session['email']=user.email
 					request.session['fname']=user.fname
 					request.session['profile_pic']=user.profile_pic.url
+					request.session['usertype']=user.usertype
 					return redirect('seller-index')
 			else:
 				msg="Invalid Password"
@@ -114,6 +125,7 @@ def signout(request):
 		del request.session['email']
 		del request.session['fname']
 		del request.session['wishlist_count']
+		del request.session['cart_count']
 		return render(request,'signin.html')
 	except:
 		return render(request,'signin.html')
@@ -125,24 +137,43 @@ def change_password(request):
 			if request.POST['new_password'] == request.POST['cnew_password']:
 				user.password=request.POST['new_password']
 				user.save()
+				msg="Password Changed Successfully"
 				return redirect('signout')
 			else:
-				msg="New Password & Confirm New Password Does Not Matched"
 				if user.usertype=="buyer":
-					return render(request,'change-password.html',{'msg':msg})
+					carts=Cart.objects.filter(user=user,paymemt_status=False)
+					net_price=0
+					total_qty=0
+					for i in carts:
+						net_price=net_price+i.total_price
+						total_qty=total_qty+i.product_qty
+					msg="New Password & confirm New Password does not matched"
+					return render(request,'change-password.html',{'msg':msg,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 				else:
+					msg="New Password & Confirm New Password Does Not Matched"
 					return render(request,'seller-change-password.html',{'msg':msg})		
 		else:
-			msg="Old Password Does Not Matched"
 			if user.usertype=="buyer":
 				carts=Cart.objects.filter(user=user,payment_status=False)
-				return render(request,'change-password.html',{'msg':msg,'carts':carts})
+				net_price=0
+				total_qty=0
+				for i in carts:
+					net_price=net_price+i.total_price
+					total_qty=total_qty+i.product_qty
+				msg="Old Password Does Not Matched"
+				return render(request,'change-password.html',{'msg':msg,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 			else:
+				msg="Old Password Does Not Matched"
 				return render(request,'seller-change-password.html',{'msg':msg})		
 	else:
 		if user.usertype=="buyer":
 			carts=Cart.objects.filter(user=user,payment_status=False)
-			return render(request,'change-password.html',{'carts':carts})
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			return render(request,'change-password.html',{'carts':carts,'net_price':net_price,'total_qty':total_qty})
 		else:
 			return render(request,'seller-change-password.html')
 
@@ -221,17 +252,28 @@ def profile(request):
 		except:
 			pass
 		user.save()
-		msg="Profile Updated Successfully"
 		request.session['profile_pic']=user.profile_pic.url
 		if user.usertype=="buyer":
 			carts=Cart.objects.filter(user=user,payment_status=False)
-			return render(request,'profile.html',{'user':user,'msg':msg,'carts':carts})
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			msg="Profile Updated Successfully"
+			return render(request,'profile.html',{'user':user,'msg':msg,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 		else:
+			msg="Profile Updated Successfully"
 			return render(request,'seller-profile.html',{'user':user,'msg':msg})
 	else:
 		if user.usertype=="buyer":
 			carts=Cart.objects.filter(user=user,payment_status=False)
-			return render(request,'profile.html',{'user':user,'carts':carts})
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			return render(request,'profile.html',{'user':user,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 		else:
 			return render(request,'seller-profile.html',{'user':user})
 
@@ -279,16 +321,61 @@ def seller_edit_product(request,pk):
 		return render(request,'seller-edit-product.html',{'product':product})
 
 def laptops(request):
-	products=Product.objects.filter(product_category="Laptop")
-	return render(request,"index.html",{'products':products})
+	try:
+		user=User.objects.get(user=user)
+		if request.session.email():
+			carts=Cart.objects.filter(user=user,paymemt_status=False)
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			products=Product.objects.filter(product_category="Laptop")
+			return render(request,"index.html",{'products':products,'carts':carts,'net_price':net_price,'total_qty':total_qty})
+		else:
+			products=Product.objects.filter(product_category="Laptop")
+			return render(request,"index.html",{'products':products})
+	except:
+		products=Product.objects.filter(product_category="Laptop")
+		return render(request,"index.html",{'products':products})
 
 def cameras(request):
-	products=Product.objects.filter(product_category="Camera")
-	return render(request,"index.html",{'products':products})
+	try:
+		user=User.objects.get(user=user)
+		if request.session.email():
+			carts=Cart.objects.filter(user=user,paymemt_status=False)
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			products=Product.objects.filter(product_category="Camera")
+			return render(request,"index.html",{'products':products,'carts':carts,'net_price':net_price,'total_qty':total_qty})
+		else:
+			products=Product.objects.filter(product_category="Camera")
+			return render(request,"index.html",{'products':products})
+	except:
+		products=Product.objects.filter(product_category="Camera")
+		return render(request,"index.html",{'products':products})
 
 def accessories(request):
-	products=Product.objects.filter(product_category="Accessories")
-	return render(request,"index.html",{'products':products})
+	try:
+		user=User.objects.get(user=user)
+		if request.session.email():
+			carts=Cart.objects.filter(user=user,paymemt_status=False)
+			net_price=0
+			total_qty=0
+			for i in carts:
+				net_price=net_price+i.total_price
+				total_qty=total_qty+i.product_qty
+			products=Product.objects.filter(product_category="Camera")
+			return render(request,"index.html",{'products':products,'carts':carts,'net_price':net_price,'total_qty':total_qty})
+		else:
+			products=Product.objects.filter(product_category="Accessories")
+			return render(request,"index.html",{'products':products})
+	except:
+		products=Product.objects.filter(product_category="Accessories")
+		return render(request,"index.html",{'products':products})
 
 def seller_laptops(request):
 	seller=User.objects.get(email=request.session['email'])
@@ -312,7 +399,7 @@ def seller_delete_product(request,pk):
 
 def product_details(request,pk):
 	user=User.objects.get(email=request.session['email'])
-	carts=Cart.objects.filter(user=user,payment_status=False)
+	#carts=Cart.objects.filter(user=user,payment_status=False)
 	wishlist_flag=False
 	cart_flag=False
 	product=Product.objects.get(pk=pk)
@@ -326,7 +413,13 @@ def product_details(request,pk):
 		cart_flag=True
 	except:
 		pass
-	return render(request,'product-details.html',{'product':product,'carts':carts,'wishlist_flag':wishlist_flag,'cart_flag':cart_flag})
+	carts=Cart.objects.filter(user=user,payment_status=False)
+	net_price=0
+	total_qty=0
+	for i in carts:
+		net_price=net_price+i.total_price
+		total_qty=total_qty+i.product_qty
+	return render(request,'product-details.html',{'product':product,'carts':carts,'wishlist_flag':wishlist_flag,'cart_flag':cart_flag,'net_price':net_price,'total_qty':total_qty})
 
 def add_to_wishlist(request,pk):
 	product=Product.objects.get(pk=pk)
@@ -339,7 +432,12 @@ def wishlist(request):
 	wishlists=Wishlist.objects.filter(user=user)
 	request.session['wishlist_count']=len(wishlists)
 	carts=Cart.objects.filter(user=user,payment_status=False)
-	return render(request,'wishlist.html',{'wishlists':wishlists,'carts':carts})
+	net_price=0
+	total_qty=0
+	for i in carts:
+		net_price=net_price+i.total_price
+		total_qty=total_qty+i.product_qty
+	return render(request,'wishlist.html',{'wishlists':wishlists,'carts':carts,'net_price':net_price,'total_qty':total_qty})
 
 def remove_from_wishlist(request,pk):
 	product=Product.objects.get(pk=pk)
@@ -375,9 +473,9 @@ def cart(request):
 	return render(request,'cart.html',{'carts':carts,'net_price':net_price,'total_qty':total_qty})
 
 def remove_from_cart(request,pk):
-	product=Product.objects.get(pk=pk)
 	user=User.objects.get(email=request.session['email'])
-	cart=Cart.objects.filter(user=user,product=product)
+	product=Product.objects.get(pk=pk)
+	cart=Cart.objects.get(user=user,product=product)
 	cart.delete()
 	product.cart_status=False
 	product.save()
@@ -442,7 +540,12 @@ def cancel(request):
 def myorder(request):
 	user=User.objects.get(email=request.session['email'])
 	carts=Cart.objects.filter(user=user,payment_status=True)
-	return render(request,'myorder.html',{'carts':carts})
+	net_price=0
+	total_qty=0
+	for i in carts:
+		net_price=net_price+i.total_price
+		total_qty=total_qty+i.product_qty
+	return render(request,'myorder.html',{'carts':carts,'net_price':net_price,'total_qty':total_qty})
 
 def seller_order(request): 
 	seller=User.objects.get(email=request.session['email'])
