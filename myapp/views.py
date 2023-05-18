@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 
 stripe.api_key = settings.STRIPE_PRIVATE_KEY
-YOUR_DOMAIN = 'http://127.0.0.1:8000'
+YOUR_DOMAIN = 'http://kunjan1319.pythonanywhere.com/'
 
 def validate_email(request):
 	email = request.GET.get('email')
@@ -324,6 +324,7 @@ def laptops(request):
 	try:
 		user=User.objects.get(user=user)
 		if request.session.email():
+			products=Product.objects.filter(product_category="Laptop")
 			carts=Cart.objects.filter(user=user,paymemt_status=False)
 			net_price=0
 			total_qty=0
@@ -343,6 +344,7 @@ def cameras(request):
 	try:
 		user=User.objects.get(user=user)
 		if request.session.email():
+			products=Product.objects.filter(product_category="Camera")
 			carts=Cart.objects.filter(user=user,paymemt_status=False)
 			net_price=0
 			total_qty=0
@@ -362,6 +364,7 @@ def accessories(request):
 	try:
 		user=User.objects.get(user=user)
 		if request.session.email():
+			products=Product.objects.filter(product_cat="Accessories")
 			carts=Cart.objects.filter(user=user,paymemt_status=False)
 			net_price=0
 			total_qty=0

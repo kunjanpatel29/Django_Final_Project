@@ -17,10 +17,10 @@
 					<!-- section title -->
 					<div class="col-md-12">
 						<div class="section-title">
-							{% if carts %}
-								<h3 class="title">My Carts</h3>
+							{% if orders %}
+								<h3 class="title">My Orders</h3>
 							{% else %}
-								<h3 class="title">No Items In Your Cart</h3>
+								<h3 class="title">No Items In Your Orders Yet</h3>
 							{% endif %}
 						</div>
 					</div>
@@ -33,11 +33,11 @@
 								<!-- tab -->
 								<div id="tab1" class="tab-pane active">
 									<div class="products-slick" data-nav="#slick-nav-1">
-										{% for i in carts %}
+										{% for i in orders %}
 										<!-- product -->
 										<div class="product">
 											<div class="product-img">
-												<img src={{i.product.product_image.url}} alt="" style="width:200px;height=200px;">
+												<img src="{{i.product.product_image.url}}" alt="" style="width:200px;height=200px;">
 											</div>
 											<div class="product-body">
 												<p class="product-category">{{i.product.product_category}}</p>
